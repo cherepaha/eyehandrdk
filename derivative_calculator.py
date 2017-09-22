@@ -3,35 +3,20 @@ import numpy as np
 
 class DerivativeCalculator:  
     def append_derivatives(self, dynamics):
-        dynamics = dynamics.groupby(level=['subj_id', 'session_no', 'block_no', 'trial_no'], 
-                                    group_keys=False).apply(self.get_velocity)
+        index = ['subj_id', 'session_no', 'block_no', 'trial_no']
+        names = {'mouse_x': 'mouse_vx', 
+                 'mouse_y': 'mouse_vy' , 
+                 'eye_x': 'eye_vx', 
+                 'eye_y': 'eye_vy'}      
+
+        for col_name, der_name in names.items():
+            dynamics[der_name] = np.concatenate(
+                    [self.differentiate(traj['timestamp'].values, traj[col_name].values) 
+                            for traj_id, traj in dynamics.groupby(level=index, group_keys=False)]
+                    )
         return dynamics
-        
-    def get_velocity(self, trajectory):
-        mouse_vx = self.differentiate(trajectory.timestamp.values, trajectory.mouse_x.values)
-        mouse_vy = self.differentiate(trajectory.timestamp.values, trajectory.mouse_y.values)
-        eye_vx = self.differentiate(trajectory.timestamp.values, trajectory.eye_x.values)
-        eye_vy = self.differentiate(trajectory.timestamp.values, trajectory.eye_y.values)
-                
-        derivatives = pd.DataFrame(np.asarray([mouse_vx, mouse_vy, eye_vx, eye_vy]).T, 
-                                   columns=['mouse_vx', 'mouse_vy', 'eye_vx', 'eye_vy'],
-                                   index=trajectory.index)
-        return pd.concat([trajectory, derivatives], axis=1)
-    
-#    use this if accelerations are also needed
-    def get_derivatives(self, trajectory):
-        mouse_vx, mouse_ax = self.differentiate(trajectory.timestamp.values, trajectory.mouse_x.values)
-        mouse_vy, _ = self.differentiate(trajectory.timestamp.values, trajectory.mouse_y.values)
-        eye_vx, eye_ax = self.differentiate(trajectory.timestamp.values, trajectory.eye_x.values)
-        eye_vy, _ = self.differentiate(trajectory.timestamp.values, trajectory.eye_y.values)
-                
-        derivatives = pd.DataFrame(np.asarray([mouse_vx, mouse_vy, eye_vx, eye_vy, mouse_ax, eye_ax]).T, 
-                                   columns=['mouse_vx', 'mouse_vy', 'eye_vx', 'eye_vy', 'mouse_ax', 'eye_ax'],
-                                   index=trajectory.index)
-        return pd.concat([trajectory, derivatives], axis=1)
-        
+           
     def differentiate(self, t, x):
-        # TODO: currently, fixed timestep is assumed. Change the formula to allow for variable timestep
         step = (t[1]-t[0])
 
         # To be able to reasonably calculate derivatives at the end-points of the trajectories,

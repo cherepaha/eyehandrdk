@@ -1,18 +1,19 @@
 import data_reader, data_preprocessor, os
 
+dr = data_reader.DataReader()
+dp = data_preprocessor.DataPreprocessor()
 
-reader = data_reader.DataReader()
-preprocessor = data_preprocessor.DataPreprocessor()
+choices, dynamics, stim_viewing = dr.get_data(path='../../data/HEM_exp_1/merged_raw/', 
+                                                  stim_viewing=True, test_mode=False)
+dynamics = dp.preprocess_data(choices, dynamics)
+stim_viewing = dp.preprocess_data(choices, stim_viewing)
 
-choices, dynamics, stim_viewing = reader.get_data(path='../../data/HEM_exp_1/merged_raw/', stim_viewing=True)
-#delta_t = dynamics.groupby(level=['subj_id', 'block_no', 'trial_no']).apply(lambda d: d.timestamp[1:]-d.timestamp[:-1])
-#delta_t = dynamics.iloc[1:, dynamics.columns.get_loc('timestamp')] - dynamics.iloc[:-1, dynamics.columns.get_loc('timestamp')]
+choices = dp.get_mouse_and_gaze_measures(choices, dynamics)
 
-choices, dynamics = preprocessor.preprocess_data(choices, dynamics)
-
-#path = '../data/processed/'
+#
+#path = '../../data/HEM_exp_1/processed_test/'
 #if not os.path.exists(path):
 #    os.makedirs(path)
 #choices.to_csv(path + 'choices.txt', sep='\t')
 #dynamics.to_csv(path + 'dynamics.txt', sep='\t')
-
+#
