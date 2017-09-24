@@ -1,5 +1,4 @@
-\.ipynb_checkpoints
+.ipynb_checkpoints
 \__pycache__
 *.pyc
 \figures
-.ipynb_checkpoints/eye_hand_lag-checkpoint.ipynb

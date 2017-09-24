@@ -19,7 +19,8 @@ class TrajectoryPlotter:
     lw=2.0
     
     def __init__(self):
-        self.ax = self.init_xy_plot()
+        pass
+#        self.ax = self.init_xy_plot()
      
     def set_axis_params(self):
         self.ax.set_xlabel(r'x coordinate', fontsize=self.axisLabelFontSize)
@@ -102,7 +103,7 @@ class TrajectoryPlotter:
         return self.ax
     
     def plot_trajectory_x(self, trajectory, styles=['-', '-'], markers=['v', 'o'], lw=2, ax=None,
-                          v=False):
+                          v=False, eye=True):
         if not ax is None:        
             self.ax = ax
         else:
@@ -123,15 +124,17 @@ class TrajectoryPlotter:
 #
             self.ax.plot(t, mouse_vx, ls=styles[0], marker=markers[0],
                          markersize = 5, label='Mouse $v_{x}$')
-            self.ax.plot(t, eye_vx, ls=styles[1], marker=markers[1],
+            if eye:
+                self.ax.plot(t, eye_vx, ls=styles[1], marker=markers[1],
                          markersize = 5, label='Eye $v_{x}$')
         else:
             self.ax.set_ylim(self.x_lim)
             self.ax.plot(trajectory.timestamp, trajectory.mouse_x, ls=styles[0], marker=markers[0],
                          markersize = 5, label='Mouse')
-            self.ax.plot(trajectory.timestamp, trajectory.eye_x, ls=styles[1], marker=markers[1],
+            if eye:
+                self.ax.plot(trajectory.timestamp, trajectory.eye_x, ls=styles[1], marker=markers[1],
                          markersize = 5, label='Eye')
-        ax.legend(fontsize = self.legendFontSize)
+        self.ax.legend(fontsize=self.legendFontSize)
         plt.tight_layout()        
         return self.ax    
     

@@ -30,6 +30,7 @@ class DataPreprocessor:
             dynamics = self.resample_trajectories(dynamics, n=resample)
         
         dc = derivative_calculator.DerivativeCalculator()
+        dynamics = dc.append_diff(dynamics)
         dynamics = dc.append_derivatives(dynamics)
                           
         return dynamics
