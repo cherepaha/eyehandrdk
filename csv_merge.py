@@ -1,6 +1,6 @@
 import os
 
-data_types = ['choices', 'dynamics', 'stim']
+data_types = ['choices', 'dynamics', 'stim_viewing']
 
 exp = 'HEM_exp_2'
 

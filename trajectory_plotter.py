@@ -102,6 +102,22 @@ class TrajectoryPlotter:
         plt.tight_layout()        
         return self.ax
     
+    def plot_trajectory_var(self, trajectory, var, lw=2, ax=None):
+        if not ax is None:        
+            self.ax = ax
+        else:
+            self.fig = plt.figure()
+            self.ax = self.fig.add_subplot(111)
+            self.ax.set_title(str(trajectory.index.unique()))
+            
+        self.ax.set_xlabel(r'time $t$', fontsize=self.axisLabelFontSize)        
+        self.ax.set_ylabel(r'%s' % (var), fontsize=self.axisLabelFontSize)
+        
+        self.ax.plot(trajectory['timestamp'], trajectory[var], lw=lw,
+                     ls='-', marker='v', markersize=5, label=var)
+        
+        return self.ax
+    
     def plot_trajectory_x(self, trajectory, styles=['-', '-'], markers=['v', 'o'], lw=2, ax=None,
                           v=False, eye=True):
         if not ax is None:        

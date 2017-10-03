@@ -1,16 +1,22 @@
 import data_reader, data_preprocessor, os
 
-def save_processed_data():
-    reader = data_reader.DataReader()
-    preprocessor = data_preprocessor.DataPreprocessor()
-
-    choices, dynamics = reader.get_data()
-    choices, dynamics = preprocessor.preprocess_data(choices, dynamics)
+def save_processed_data(path):
+    dr = data_reader.DataReader()
+    dp = data_preprocessor.DataPreprocessor()
     
-    path = '../data/processed/'
-    if not os.path.exists(path):
-        os.makedirs(path)
-    choices.to_csv(path + 'choices.txt', sep='\t')
-    dynamics.to_csv(path + 'dynamics.txt', sep='\t')
+    choices, dynamics, stim_viewing = dr.get_data(path=path+'merged_raw/', 
+                                                  stim_viewing=True, test_mode=False)
+    dynamics = dp.preprocess_data(choices, dynamics)
+    stim_viewing = dp.preprocess_data(choices, stim_viewing)
+    
+    choices = dp.get_mouse_and_gaze_measures(choices, dynamics, stim_viewing)
+    
+    processed_path = path + 'processed/'
+    if not os.path.exists(processed_path):
+        os.makedirs(processed_path)
+    choices.to_csv(processed_path + 'choices.txt', sep='\t')
+    dynamics.to_csv(processed_path + 'dynamics.txt', sep='\t')
+    stim_viewing.to_csv(processed_path + 'stim_viewing.txt', sep='\t')
 
-save_processed_data()
+save_processed_data(path='../../data/HEM_exp_1/')
+#save_processed_data(path='../../data/HEM_exp_2/')

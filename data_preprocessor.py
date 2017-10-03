@@ -35,7 +35,7 @@ class DataPreprocessor:
                           
         return dynamics
     
-    def get_mouse_and_gaze_measures(self, choices, dynamics):
+    def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
         choices.response_time /= 1000.0
         choices['xflips'] = dynamics.groupby(level=self.index).\
                                     apply(lambda traj: self.zero_cross_count(traj.mouse_vx))    
@@ -45,6 +45,10 @@ class DataPreprocessor:
                                 (choices.midline_d_y > self.com_threshold_y))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_initiation_time))
         
+        choices['early_it'] = stim_viewing.groupby(level=self.index).apply(
+                lambda traj: traj.timestamp.max()-traj.timestamp[traj.mouse_dx==0].iloc[-1])
+        
+        choices.loc[choices.initiation_time==0, 'initation_time']
         return choices
     
     def set_origin_to_start(self, dynamics):
@@ -131,10 +135,8 @@ class DataPreprocessor:
         return pd.Series({'initiation_time': initiation_time, 
                           'motion_time': motion_time})
     
-    def get_early_initiation_time(self, viewing_trajectory):
-        trimmed_traj = viewing_trajectory.drop_duplicates(subset=['mouse_x', 'mouse_y'], keep='last')
-        initiation_time = trimmed_traj.timestamp.max() - trajectory.timestamp.min()
-        motion_time = trimmed_traj.timestamp.max() - trimmed_traj.timestamp.min()        
+    def get_early_initiation_time(self, trajectory):        
+        return trajectory.timestamp.max() - trajectory.timestamp[trajectory.mouse_dx==0].iloc[-1]        
         
     def append_is_early_response(self, choices, dynamics):
         dynamics = dynamics.join(choices.initiation_time)
