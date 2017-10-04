@@ -19,4 +19,4 @@ def save_processed_data(path):
     stim_viewing.to_csv(processed_path + 'stim_viewing.txt', sep='\t')
 
 save_processed_data(path='../../data/HEM_exp_1/')
-#save_processed_data(path='../../data/HEM_exp_2/')
+save_processed_data(path='../../data/HEM_exp_2/')

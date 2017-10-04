@@ -9,6 +9,11 @@ class DataPreprocessor:
     
     com_threshold_x = 50
     com_threshold_y = 100
+    
+    # to determine exact response intiation,
+    # threshold for distance travelled by mouse cursor (in pixels) during single movement
+    # it is needed when calculating initation time
+    it_distance_threshold = 100
         
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
@@ -32,6 +37,8 @@ class DataPreprocessor:
         dc = derivative_calculator.DerivativeCalculator()
         dynamics = dc.append_diff(dynamics)
         dynamics = dc.append_derivatives(dynamics)
+        
+        dynamics['mouse_v'] = np.sqrt(dynamics.mouse_vx**2 + dynamics.mouse_vy**2 )        
                           
         return dynamics
     
@@ -48,7 +55,6 @@ class DataPreprocessor:
         choices['early_it'] = stim_viewing.groupby(level=self.index).apply(
                 lambda traj: traj.timestamp.max()-traj.timestamp[traj.mouse_dx==0].iloc[-1])
         
-        choices.loc[choices.initiation_time==0, 'initation_time']
         return choices
     
     def set_origin_to_start(self, dynamics):
@@ -127,13 +133,42 @@ class DataPreprocessor:
     def zero_cross_count(self, x):
         return (abs(np.diff(np.sign(x))) > 1).sum()
 
-    def get_initiation_time(self, trajectory):
-        trimmed_traj = trajectory.drop_duplicates(subset=['mouse_x', 'mouse_y'], keep='last')
-        initiation_time = trimmed_traj.timestamp.min() - trajectory.timestamp.min()
-        motion_time = trimmed_traj.timestamp.max() - trimmed_traj.timestamp.min()
-        
-        return pd.Series({'initiation_time': initiation_time, 
-                          'motion_time': motion_time})
+    def get_initiation_time(self, traj):
+        v = traj.mouse_v.values
+    
+        onsets = []
+        offsets = []
+        is_previous_v_zero = True
+    
+        for i in np.arange(0,len(v)):
+            if v[i]!=0:
+                if is_previous_v_zero:
+                    is_previous_v_zero = False
+                    onsets += [i]
+                elif (i==len(v)-1):
+                    offsets += [i]            
+            elif (not is_previous_v_zero):
+                offsets += [i]
+                is_previous_v_zero = True
+    
+        submovements = pd.DataFrame([{'on': onsets[i], 
+                 'off': offsets[i], 
+                 'on_t': traj.timestamp.values[onsets[i]],
+                 'distance':(traj.mouse_v[onsets[i]:offsets[i]]*
+                             traj.timestamp.diff()[onsets[i]:offsets[i]]).sum()}
+                for i in range(len(onsets))])
+    
+        it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
+        return pd.Series({'initiation_time': it, 'motion_time': traj.timestamp.max()-it})
+
+    # OBSOLETE
+#    def get_initiation_time(self, trajectory):
+#        trimmed_traj = trajectory.drop_duplicates(subset=['mouse_x', 'mouse_y'], keep='last')
+#        initiation_time = trimmed_traj.timestamp.min() - trajectory.timestamp.min()
+#        motion_time = trimmed_traj.timestamp.max() - trimmed_traj.timestamp.min()
+#        
+#        return pd.Series({'initiation_time': initiation_time, 
+#                          'motion_time': motion_time})
     
     def get_early_initiation_time(self, trajectory):        
         return trajectory.timestamp.max() - trajectory.timestamp[trajectory.mouse_dx==0].iloc[-1]        
@@ -142,15 +177,4 @@ class DataPreprocessor:
         dynamics = dynamics.join(choices.initiation_time)
         choices['is_early_response'] = dynamics.groupby(level=self.index). \
                         apply(lambda traj: traj.initiation_time.iloc[0]==0)
-#                        apply(lambda traj: traj.mouse_vx.iloc[0]!=0)
         return choices
-    
-    def get_initiation_time_v1(self, trajectory):
-        submovements = self.get_submovements(trajectory.vx.values)
-        
-        
-    def get_submovements(self, vx):
-        # TODO: look into old code for AP extraction from stick balancing data
-        # in a simple for loop, go through 
-        # return dataframe with columns idx_start, idx_end, t_start, t_end, distance
-        pass
