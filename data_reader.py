@@ -1,31 +1,19 @@
 import pandas as pd
-import random
 
-class DataReader:    
-    def get_data(self, path, stim_viewing=False, test_mode=False):
+class DataReader:
+    index = ['subj_id', 'session_no', 'block_no', 'trial_no']
+    
+    def get_data(self, path, stim_viewing=False):
         filePath = path + '%s.txt'
         choicesFilePath = filePath % ('choices')
-        choices = pd.read_csv(choicesFilePath, sep='\t')
-        choices.set_index(['subj_id', 'session_no', 'block_no', 'trial_no'], inplace=True, drop=True)
-        choices['is_correct'] = choices['direction'] == choices['response']
-        choices.rename(columns={'reaction_time': 'initiation_time'}, inplace=True)
+        choices = pd.read_csv(choicesFilePath, sep='\t').set_index(self.index, drop=True)
         
         dynamicsFilePath = filePath % ('dynamics')       
-        dynamics = pd.read_csv(dynamicsFilePath, sep='\t')        
-        dynamics.set_index(['subj_id', 'session_no', 'block_no', 'trial_no'], inplace=True, drop=True)
-        
-        rows = sorted(random.sample(list(choices.index), 100))
-        if test_mode:            
-            choices = choices.loc[rows]
-            dynamics = dynamics.loc[rows]
+        dynamics = pd.read_csv(dynamicsFilePath, sep='\t').set_index(self.index, drop=True)
         
         if stim_viewing:
             stimFilePath = filePath % ('stim_viewing')       
-            stim_viewing = pd.read_csv(stimFilePath, sep='\t')        
-            stim_viewing.set_index(['subj_id', 'session_no', 'block_no', 'trial_no'], 
-                                   inplace=True, drop=True)
-            if test_mode:
-                stim_viewing = stim_viewing.loc[rows]
+            stim_viewing = pd.read_csv(stimFilePath, sep='\t').set_index(self.index, drop=True)
             
             return choices, dynamics, stim_viewing        
         else:

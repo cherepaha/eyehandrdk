@@ -108,7 +108,7 @@ class TrajectoryPlotter:
         else:
             self.fig = plt.figure()
             self.ax = self.fig.add_subplot(111)
-            self.ax.set_title(str(trajectory.index.unique()))
+            self.ax.set_title(str(trajectory.index.unique().levels))
             
         self.ax.set_xlabel(r'time $t$', fontsize=self.axisLabelFontSize)        
         self.ax.set_ylabel(r'%s' % (var), fontsize=self.axisLabelFontSize)

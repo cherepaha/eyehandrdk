@@ -14,13 +14,15 @@ class DataPreprocessor:
     # threshold for distance travelled by mouse cursor (in pixels) during single movement
     # it is needed when calculating initation time
     it_distance_threshold = 100
+    eye_v_threshold = 200
+
+    # these two trials have very poor eye data, so we exclude them
+    excluded_trials = [(391, 1, 10, 59), (451, 1, 8, 27)]
         
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
     def preprocess_data(self, choices, dynamics, resample=0):
-        # these two trials have very poor eye data, so better drop them
-#        choices.drop([(391, 1, 10, 59), (451, 1, 8, 27)], inplace=True)
-#        dynamics.drop([(391, 1, 10, 59), (451, 1, 8, 27)], inplace=True)
+#        choices, dynamics = self.drop_excluded_trials(choices, dynamics, self.excluded_trials)
         
         # originally, EyeLink data has -32768.0 values in place when data loss occurred
         # we replace it with np.nan to be able to use numpy functions properly
@@ -38,11 +40,27 @@ class DataPreprocessor:
         dynamics = dc.append_diff(dynamics)
         dynamics = dc.append_derivatives(dynamics)
         
-        dynamics['mouse_v'] = np.sqrt(dynamics.mouse_vx**2 + dynamics.mouse_vy**2 )        
+        dynamics['mouse_v'] = np.sqrt(dynamics.mouse_vx**2 + dynamics.mouse_vy**2 )
+        dynamics['eye_v'] = np.sqrt(dynamics.eye_vx**2 + dynamics.eye_vy**2 )        
                           
         return dynamics
+
+    def drop_excluded_trials(self, choices, dynamics, trials):
+        choices = choices.drop(trials, errors='ignore')
+        
+        # NB: this is a hack to deal with (supposedly) pandas bug.
+        # When multiindex values are not unique (as in dynamics dataframes), 
+        # drop doesn't really work, so we have to remove trials one-by-one
+        dynamics = dynamics.reset_index()
+        for trial in trials:
+            dynamics = dynamics[~((dynamics.subj_id==trial[0]) & (dynamics.session_no==trial[1]) & 
+                                  (dynamics.block_no==trial[2]) & (dynamics.trial_no==trial[3]))]
+        dynamics = dynamics.set_index(self.index, drop=True)
+        
+        return choices, dynamics        
     
     def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
+        choices['is_correct'] = choices['direction'] == choices['response']
         choices.response_time /= 1000.0
         choices['xflips'] = dynamics.groupby(level=self.index).\
                                     apply(lambda traj: self.zero_cross_count(traj.mouse_vx))    
@@ -50,7 +68,8 @@ class DataPreprocessor:
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_midline_d))
         choices['is_com'] = ((choices.midline_d > self.com_threshold_x) & \
                                 (choices.midline_d_y > self.com_threshold_y))
-        choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_initiation_time))
+        choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
+        choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
         
         choices['early_it'] = stim_viewing.groupby(level=self.index).apply(
                 lambda traj: traj.timestamp.max()-traj.timestamp[traj.mouse_dx==0].iloc[-1])
@@ -68,7 +87,7 @@ class DataPreprocessor:
     def shift_timeframe(self, dynamics):
         # shift time to the timeframe beginning at 0 for each trajectory
         # also, express time in seconds rather than milliseconds
-        dynamics.loc[:,'timestamp'] = dynamics.timestamp.groupby(level=self.index). \
+        dynamics.loc[:,'timestamp'] = dynamics.timestamp.groupby(by=self.index). \
                                         transform(lambda t: (t-t.min()))/1000.0
         return dynamics
 
@@ -133,7 +152,7 @@ class DataPreprocessor:
     def zero_cross_count(self, x):
         return (abs(np.diff(np.sign(x))) > 1).sum()
 
-    def get_initiation_time(self, traj):
+    def get_mouse_IT(self, traj):
         v = traj.mouse_v.values
     
         onsets = []
@@ -159,17 +178,28 @@ class DataPreprocessor:
                 for i in range(len(onsets))])
     
         it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
-        return pd.Series({'initiation_time': it, 'motion_time': traj.timestamp.max()-it})
-
-    # OBSOLETE
-#    def get_initiation_time(self, trajectory):
-#        trimmed_traj = trajectory.drop_duplicates(subset=['mouse_x', 'mouse_y'], keep='last')
-#        initiation_time = trimmed_traj.timestamp.min() - trajectory.timestamp.min()
-#        motion_time = trimmed_traj.timestamp.max() - trimmed_traj.timestamp.min()
-#        
-#        return pd.Series({'initiation_time': initiation_time, 
-#                          'motion_time': motion_time})
+        return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
     
+    def get_eye_IT(self, trajectory):        
+        eye_v = trajectory.eye_v
+        if ((eye_v < self.eye_v_threshold) | (eye_v.isnull())).all():
+            # if eye stays at one location throughout the whole trial, 
+            # it is supposedly fixated either at the center of the screen, or at the response location
+            # in the former case, initation time is inf, in the latter case, initation time is 0
+            # we detect which case is tru  by looking at first value of eye_x
+            if abs(trajectory.eye_x.iloc[0] < 100): 
+                eye_IT = np.inf
+                eye_initial_decision = 0
+            else:
+                eye_IT = 0
+                eye_initial_decision = np.sign(trajectory.eye_x.iloc[0])
+        else:
+            eye_IT_idx = (eye_v > self.eye_v_threshold).nonzero()[0][0]
+            eye_IT = trajectory.timestamp.iloc[eye_IT_idx]
+            eye_initial_decision = np.sign(trajectory.eye_x.iloc[eye_IT_idx+1])
+        
+        return pd.Series({'eye_IT': eye_IT, 'eye_initial_decision': eye_initial_decision})
+
     def get_early_initiation_time(self, trajectory):        
         return trajectory.timestamp.max() - trajectory.timestamp[trajectory.mouse_dx==0].iloc[-1]        
         

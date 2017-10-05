@@ -4,8 +4,7 @@ def save_processed_data(path):
     dr = data_reader.DataReader()
     dp = data_preprocessor.DataPreprocessor()
     
-    choices, dynamics, stim_viewing = dr.get_data(path=path+'merged_raw/', 
-                                                  stim_viewing=True, test_mode=False)
+    choices, dynamics, stim_viewing = dr.get_data(path=path+'merged_raw/', stim_viewing=True)
     dynamics = dp.preprocess_data(choices, dynamics)
     stim_viewing = dp.preprocess_data(choices, stim_viewing)
     
