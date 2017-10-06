@@ -70,6 +70,10 @@ class DataPreprocessor:
                                 (choices.midline_d_y > self.com_threshold_y))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
+        choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
+        
+        choices['mouse_IT_norm'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: c/c.mean())
+        choices['eye_IT_norm'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: c/c.mean())
         
         choices['early_it'] = stim_viewing.groupby(level=self.index).apply(
                 lambda traj: traj.timestamp.max()-traj.timestamp[traj.mouse_dx==0].iloc[-1])
