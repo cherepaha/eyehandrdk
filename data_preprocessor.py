@@ -14,6 +14,7 @@ class DataPreprocessor:
     # threshold for distance travelled by mouse cursor (in pixels) during single movement
     # it is needed when calculating initation time
     it_distance_threshold = 100
+    # there are still some false alarms, especially in Exp 1, but they are still few (around 20)
     eye_v_threshold = 200
 
     # these two trials have very poor eye data, so we exclude them
@@ -70,13 +71,21 @@ class DataPreprocessor:
                                 (choices.midline_d_y > self.com_threshold_y))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
+        
+        # initiation time during stimulus presentation is aligned at stimulus offset, so it is non-positive
+        choices['stim_mouse_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_mouse_IT)
+        choices['stim_eye_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_eye_IT)
+        # Comment next line for premature responses to have mouse_IT = 0 regardless mouse movements during stimulus viewing        
+        choices.loc[choices.mouse_IT==0, 'mouse_IT'] = choices.loc[choices.mouse_IT==0, 'stim_mouse_IT']
+        # this correction is also recommended for eye_IT
+        choices.loc[choices.eye_IT==0, 'eye_IT'] = choices.loc[choices.eye_IT==0, 'stim_eye_IT']
+                
         choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
         
-        choices['mouse_IT_norm'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: c/c.mean())
-        choices['eye_IT_norm'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: c/c.mean())
-        
-        choices['early_it'] = stim_viewing.groupby(level=self.index).apply(
-                lambda traj: traj.timestamp.max()-traj.timestamp[traj.mouse_dx==0].iloc[-1])
+        # We can also z-score within participant AND coherence level, the results remain the same
+        # ['subj_id', 'coherence']
+        choices['mouse_IT_z'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
+        choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
         
         return choices
     
@@ -105,35 +114,19 @@ class DataPreprocessor:
                                     apply(lambda traj: self.resample_trajectory(traj, n_steps=n_steps))
         resampled_dynamics.index = resampled_dynamics.index.droplevel(4)
         return resampled_dynamics
-        
-    def resample_trajectory(self, trajectory, n_steps):
-        # Make the sampling time intervals regular
-        n = np.arange(0, n_steps+1)
-        t_regular = np.linspace(trajectory.timestamp.min(), trajectory.timestamp.max(), n_steps+1)
-        mouse_x_interp = np.interp(t_regular, trajectory.timestamp.values, trajectory.mouse_x.values)
-        mouse_y_interp = np.interp(t_regular, trajectory.timestamp.values, trajectory.mouse_y.values)
-        eye_x_interp = np.interp(t_regular, trajectory.timestamp.values, trajectory.eye_x.values)
-        eye_y_interp = np.interp(t_regular, trajectory.timestamp.values, trajectory.eye_y.values)
-        pupil_size_interp = np.interp(t_regular, trajectory.timestamp.values, 
-                                      trajectory.pupil_size.values)
-        traj_interp = pd.DataFrame([n, t_regular, mouse_x_interp, mouse_y_interp, \
-                                    eye_x_interp, eye_y_interp, pupil_size_interp]).transpose()
-        traj_interp.columns = ['n', 'timestamp', 'mouse_x', 'mouse_y', 'eye_x', 'eye_y', 'pupil_size']
-#        traj_interp.index = range(1,n_steps+1)
-        return traj_interp
-    
-    def get_maxd(self, trajectory):
-        alpha = np.arctan((trajectory.mouse_y.iloc[-1]-trajectory.mouse_y.iloc[0])/ \
-                            (trajectory.mouse_x.iloc[-1]-trajectory.mouse_x.iloc[0]))
-        d = (trajectory.mouse_x.values-trajectory.mouse_x.values[0])*np.sin(-alpha) + \
-            (trajectory.mouse_y.values-trajectory.mouse_y.values[0])*np.cos(-alpha)
+            
+    def get_maxd(self, traj):
+        alpha = np.arctan((traj.mouse_y.iloc[-1]-traj.mouse_y.iloc[0])/ \
+                            (traj.mouse_x.iloc[-1]-traj.mouse_x.iloc[0]))
+        d = (traj.mouse_x.values-traj.mouse_x.values[0])*np.sin(-alpha) + \
+            (traj.mouse_y.values-traj.mouse_y.values[0])*np.cos(-alpha)
         if abs(d.min())>abs(d.max()):
             return pd.Series({'max_d': d.min(), 'idx_max_d': d.argmin()})
         else:
             return pd.Series({'max_d': d.max(), 'idx_max_d': d.argmax()})
         
-    def get_midline_d(self, trajectory):
-        mouse_x = trajectory.mouse_x.values
+    def get_midline_d(self, traj):
+        mouse_x = traj.mouse_x.values
         is_final_point_positive = (mouse_x[-1]>0)
         
 #        if is_final_point_positive:
@@ -143,12 +136,12 @@ class DataPreprocessor:
 #            midline_d = abs(mouse_x.max())
 ##            idx_midline_d = int(mouse_x.argmax())
         midline_d = mouse_x.min() if is_final_point_positive else mouse_x.max()
-#        print(trajectory)
+#        print(traj)
 #        print(midline_d)
 #        print(abs(mouse_x.argmin()) if is_final_point_positive else abs(mouse_x.argmax()))
 #        print((mouse_x == midline_d).nonzero())
         idx_midline_d = (mouse_x == midline_d).nonzero()[0][-1]
-        midline_d_y = trajectory.mouse_y.values[idx_midline_d]
+        midline_d_y = traj.mouse_y.values[idx_midline_d]
         return pd.Series({'midline_d': abs(midline_d), 
                           'idx_midline_d': idx_midline_d,
                           'midline_d_y': midline_d_y})
@@ -184,31 +177,55 @@ class DataPreprocessor:
         it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
         return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
     
-    def get_eye_IT(self, trajectory):        
-        eye_v = trajectory.eye_v
-        if ((eye_v < self.eye_v_threshold) | (eye_v.isnull())).all():
+    def get_eye_IT(self, traj):        
+        v = traj.eye_v
+        if ((v < self.eye_v_threshold) | (v.isnull())).all():
             # if eye stays at one location throughout the whole trial, 
             # it is supposedly fixated either at the center of the screen, or at the response location
             # in the former case, initation time is inf, in the latter case, initation time is 0
             # we detect which case is tru  by looking at first value of eye_x
-            if abs(trajectory.eye_x.iloc[0] < 100): 
+            if abs(traj.eye_x.iloc[0]) < 100: 
                 eye_IT = np.inf
                 eye_initial_decision = 0
             else:
                 eye_IT = 0
-                eye_initial_decision = np.sign(trajectory.eye_x.iloc[0])
+                eye_initial_decision = np.sign(traj.eye_x.iloc[0])
         else:
-            eye_IT_idx = (eye_v > self.eye_v_threshold).nonzero()[0][0]
-            eye_IT = trajectory.timestamp.iloc[eye_IT_idx]
-            eye_initial_decision = np.sign(trajectory.eye_x.iloc[eye_IT_idx+1])
+            eye_IT_idx = (v > self.eye_v_threshold).nonzero()[0][0]
+            eye_IT = traj.timestamp.iloc[eye_IT_idx]
+            eye_initial_decision = np.sign(traj.eye_x.iloc[eye_IT_idx+1])
         
         return pd.Series({'eye_IT': eye_IT, 'eye_initial_decision': eye_initial_decision})
 
-    def get_early_initiation_time(self, trajectory):        
-        return trajectory.timestamp.max() - trajectory.timestamp[trajectory.mouse_dx==0].iloc[-1]        
-        
-    def append_is_early_response(self, choices, dynamics):
-        dynamics = dynamics.join(choices.initiation_time)
-        choices['is_early_response'] = dynamics.groupby(level=self.index). \
-                        apply(lambda traj: traj.initiation_time.iloc[0]==0)
-        return choices
+    def get_stim_mouse_IT(self, stim_traj):
+        t = stim_traj.timestamp.values
+        v = stim_traj.mouse_v.values
+        if v[-1]:
+            idx = np.where(v==0)[0][-1]+1 if len(v[v==0]) else 0
+            IT = (t[idx] - t.max())
+        else:
+            IT = 0
+        return IT
+    
+    def get_stim_eye_IT(self, stim_traj):
+        t = stim_traj.timestamp.values
+        v = stim_traj.eye_v.values
+    
+        idx = np.where(v<self.eye_v_threshold)[0][-1] if len(v[v<self.eye_v_threshold]) else 0
+        return (t[idx] - t.max())
+    
+    def resample_trajectory(self, traj, n_steps):
+        # Make the sampling time intervals regular
+        n = np.arange(0, n_steps+1)
+        t_regular = np.linspace(traj.timestamp.min(), traj.timestamp.max(), n_steps+1)
+        mouse_x_interp = np.interp(t_regular, traj.timestamp.values, traj.mouse_x.values)
+        mouse_y_interp = np.interp(t_regular, traj.timestamp.values, traj.mouse_y.values)
+        eye_x_interp = np.interp(t_regular, traj.timestamp.values, traj.eye_x.values)
+        eye_y_interp = np.interp(t_regular, traj.timestamp.values, traj.eye_y.values)
+        pupil_size_interp = np.interp(t_regular, traj.timestamp.values, 
+                                      traj.pupil_size.values)
+        traj_interp = pd.DataFrame([n, t_regular, mouse_x_interp, mouse_y_interp, \
+                                    eye_x_interp, eye_y_interp, pupil_size_interp]).transpose()
+        traj_interp.columns = ['n', 'timestamp', 'mouse_x', 'mouse_y', 'eye_x', 'eye_y', 'pupil_size']
+#        traj_interp.index = range(1,n_steps+1)
+        return traj_interp
