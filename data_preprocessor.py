@@ -85,7 +85,7 @@ class DataPreprocessor:
         # We can also z-score within participant AND coherence level, the results remain the same
         # ['subj_id', 'coherence']
         choices['mouse_IT_z'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
-        choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
+        choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         
         return choices
     

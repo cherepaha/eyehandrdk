@@ -6,7 +6,7 @@ class DataReader:
     def get_data(self, path, stim_viewing=False):
         filePath = path + '%s.txt'
         choicesFilePath = filePath % ('choices')
-        choices = pd.read_csv(choicesFilePath, sep='\t').set_index(self.index, drop=True)
+        choices = pd.read_csv(choicesFilePath, sep='\t').set_index(self.index, drop=False)
         
         dynamicsFilePath = filePath % ('dynamics')       
         dynamics = pd.read_csv(dynamicsFilePath, sep='\t').set_index(self.index, drop=True)
