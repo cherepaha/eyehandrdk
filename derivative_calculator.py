@@ -2,8 +2,9 @@ import pandas as pd
 import numpy as np
 
 class DerivativeCalculator:   
-    def append_diff(self, dynamics):
-        index = ['subj_id', 'session_no', 'block_no', 'trial_no']
+    index = ['subj_id', 'session_no', 'block_no', 'trial_no']
+    
+    def append_diff(self, dynamics):        
         names = {'mouse_x': 'mouse_dx', 
                  'mouse_y': 'mouse_dy' , 
                  'eye_x': 'eye_dx', 
@@ -12,12 +13,11 @@ class DerivativeCalculator:
         for col_name, der_name in names.items():
             dynamics[der_name] = np.concatenate(
                     [self.get_diff(traj['timestamp'].values, traj[col_name].values) 
-                            for traj_id, traj in dynamics.groupby(level=index, group_keys=False)]
+                            for traj_id, traj in dynamics.groupby(level=self.index, group_keys=False)]
                     )
         return dynamics
     
     def append_derivatives(self, dynamics):
-        index = ['subj_id', 'session_no', 'block_no', 'trial_no']
         names = {'mouse_x': 'mouse_vx', 
                  'mouse_y': 'mouse_vy' , 
                  'eye_x': 'eye_vx', 
@@ -26,7 +26,7 @@ class DerivativeCalculator:
         for col_name, der_name in names.items():
             dynamics[der_name] = np.concatenate(
                     [self.differentiate(traj['timestamp'].values, traj[col_name].values) 
-                            for traj_id, traj in dynamics.groupby(level=index, group_keys=False)]
+                            for traj_id, traj in dynamics.groupby(level=self.index, group_keys=False)]
                     )
         return dynamics
     

@@ -14,8 +14,7 @@ class DataPreprocessor:
     # threshold for distance travelled by mouse cursor (in pixels) during single movement
     # it is needed when calculating initation time
     it_distance_threshold = 100
-    # there are still some false alarms, especially in Exp 1, but they are still few (around 20)
-    eye_v_threshold = 200
+    eye_v_threshold = 1000
 
     # these two trials have very poor eye data, so we exclude them
     excluded_trials = [(391, 1, 10, 59), (451, 1, 8, 27)]
@@ -62,9 +61,9 @@ class DataPreprocessor:
     
     def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
         choices['is_correct'] = choices['direction'] == choices['response']
-        choices.response_time /= 1000.0
+        choices.response_time /= 1000.0        
         choices['xflips'] = dynamics.groupby(level=self.index).\
-                                    apply(lambda traj: self.zero_cross_count(traj.mouse_vx))    
+                                    apply(lambda traj: self.zero_cross_count(traj.mouse_vx.values))    
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_maxd))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_midline_d))
         choices['is_com'] = ((choices.midline_d > self.com_threshold_x) & \
@@ -129,17 +128,8 @@ class DataPreprocessor:
         mouse_x = traj.mouse_x.values
         is_final_point_positive = (mouse_x[-1]>0)
         
-#        if is_final_point_positive:
-#            midline_d = abs(mouse_x.min())
-##            idx_midline_d = int(mouse_x.argmin())
-#        else:
-#            midline_d = abs(mouse_x.max())
-##            idx_midline_d = int(mouse_x.argmax())
         midline_d = mouse_x.min() if is_final_point_positive else mouse_x.max()
-#        print(traj)
-#        print(midline_d)
-#        print(abs(mouse_x.argmin()) if is_final_point_positive else abs(mouse_x.argmax()))
-#        print((mouse_x == midline_d).nonzero())
+
         idx_midline_d = (mouse_x == midline_d).nonzero()[0][-1]
         midline_d_y = traj.mouse_y.values[idx_midline_d]
         return pd.Series({'midline_d': abs(midline_d), 
@@ -147,7 +137,7 @@ class DataPreprocessor:
                           'midline_d_y': midline_d_y})
 
     def zero_cross_count(self, x):
-        return (abs(np.diff(np.sign(x))) > 1).sum()
+        return (abs(np.diff(np.sign(x)[np.nonzero(np.sign(x))]))>1).sum()
 
     def get_mouse_IT(self, traj):
         v = traj.mouse_v.values
@@ -196,6 +186,34 @@ class DataPreprocessor:
             eye_initial_decision = np.sign(traj.eye_x.iloc[eye_IT_idx+1])
         
         return pd.Series({'eye_IT': eye_IT, 'eye_initial_decision': eye_initial_decision})
+
+    def get_com_lag(self, traj):
+        v = traj.eye_v.values
+    
+        onsets = []
+        offsets = []
+        is_previous_v_zero = True
+    
+        for i in np.arange(0,len(v)):
+            if v[i]!=0:
+                if is_previous_v_zero:
+                    is_previous_v_zero = False
+                    onsets += [i]
+                elif (i==len(v)-1):
+                    offsets += [i]            
+            elif (not is_previous_v_zero):
+                offsets += [i]
+                is_previous_v_zero = True
+    
+        submovements = pd.DataFrame([{'on': onsets[i], 
+                 'off': offsets[i], 
+                 'on_t': traj.timestamp.values[onsets[i]],
+                 'distance':(traj.mouse_v[onsets[i]:offsets[i]]*
+                             traj.timestamp.diff()[onsets[i]:offsets[i]]).sum()}
+                for i in range(len(onsets))])
+    
+        it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
+        return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
 
     def get_stim_mouse_IT(self, stim_traj):
         t = stim_traj.timestamp.values
