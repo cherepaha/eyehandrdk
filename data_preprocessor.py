@@ -81,6 +81,8 @@ class DataPreprocessor:
                 
         choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
         
+        choices = choices.join(dynamics[choices.is_com].groupby(level=self.index).apply(self.get_com_lag))
+        
         # We can also z-score within participant AND coherence level, the results remain the same
         # ['subj_id', 'coherence']
         choices['mouse_IT_z'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
@@ -187,34 +189,6 @@ class DataPreprocessor:
         
         return pd.Series({'eye_IT': eye_IT, 'eye_initial_decision': eye_initial_decision})
 
-    def get_com_lag(self, traj):
-        v = traj.eye_v.values
-    
-        onsets = []
-        offsets = []
-        is_previous_v_zero = True
-    
-        for i in np.arange(0,len(v)):
-            if v[i]!=0:
-                if is_previous_v_zero:
-                    is_previous_v_zero = False
-                    onsets += [i]
-                elif (i==len(v)-1):
-                    offsets += [i]            
-            elif (not is_previous_v_zero):
-                offsets += [i]
-                is_previous_v_zero = True
-    
-        submovements = pd.DataFrame([{'on': onsets[i], 
-                 'off': offsets[i], 
-                 'on_t': traj.timestamp.values[onsets[i]],
-                 'distance':(traj.mouse_v[onsets[i]:offsets[i]]*
-                             traj.timestamp.diff()[onsets[i]:offsets[i]]).sum()}
-                for i in range(len(onsets))])
-    
-        it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
-        return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
-
     def get_stim_mouse_IT(self, stim_traj):
         t = stim_traj.timestamp.values
         v = stim_traj.mouse_v.values
@@ -247,3 +221,100 @@ class DataPreprocessor:
         traj_interp.columns = ['n', 'timestamp', 'mouse_x', 'mouse_y', 'eye_x', 'eye_y', 'pupil_size']
 #        traj_interp.index = range(1,n_steps+1)
         return traj_interp
+    
+    def remove_blinks(self, x, fillna='extrapolate'):
+        # number of time steps around blink to erase
+        # 5 steps is 50 ms
+        window = 5
+        onsets = []
+        offsets = []
+        is_previous_x_nan = False
+        
+        # first, get onsets and offsets for each blink
+        for i in range(0,len(x)):
+            if np.isnan(x[i]):
+                if not is_previous_x_nan:
+                    is_previous_x_nan = True
+                    onsets += [i]
+                elif (i==len(x)-1):
+                    offsets += [i]            
+            elif is_previous_x_nan:
+                offsets += [i]
+                is_previous_x_nan = False
+                
+        if len(onsets) != len(offsets):
+            raise ValueError('NaN onsets and offsets do not match!')
+            
+        # second, for every blink, drop 'window' data points immediately before and after the blink,
+        # and fill in the blanks by extrapolating from the available data points (or zeros, depending on fillna parameter)
+        for i in range(0,len(onsets)):
+            onset = onsets[i]
+            offset = offsets[i]        
+            if fillna=='extrapolate':
+                x[onset-window:int(np.floor((onset+offset)/2))] = x[onset-window-1]
+                x[int(np.floor((onset+offset)/2)):offset+window] = x[offset+window+1]
+            elif fillna=='zeros':
+                x[onset-window:offset+window] = 0
+            else:
+                raise ValueError('Incorrect value of fillna parameter')
+                    
+        return x
+    
+    def get_com_lag(self, trajectory):   
+        com_idx = int(trajectory.idx_midline_d.values[0])
+        com_direction = np.sign(trajectory.mouse_vx.iloc[com_idx + 1])
+        
+        t = trajectory.timestamp.values        
+        v = self.remove_nans(trajectory.eye_vx.values, fillna='zeros')
+    
+        # to simplify saccade identification, treat all sub-threshold velocity values as zeros
+        # to simplify this further, we only care about the saccades that match the direction of CoM
+        # so we can simply drop all velocities in the wrong direction to zero
+        v[(abs(v)<self.eye_v_threshold) & ~(np.sign(v)==com_direction)] = 0
+        
+        onsets = []
+        offsets = []
+        is_previous_v_zero = True
+        
+        # next, we go through every value of v and extract saccade onsets and offsets    
+        for i in range(0,len(v)):
+            if v[i]!=0:
+                if is_previous_v_zero:
+                    is_previous_v_zero = False
+                    onsets += [i]
+                elif (i==len(v)-1):
+                    offsets += [i]            
+            elif (not is_previous_v_zero):
+                offsets += [i]
+                is_previous_v_zero = True
+        
+        if len(onsets) == 0:
+            return pd.Series({'com_saccade_idx': np.nan,
+                              't_com': np.nan,
+                              't_com_saccade': np.nan, 
+                              'com_lag': np.nan})
+        elif len(onsets) != len(offsets):
+            raise ValueError('Saccade onsets and offsets do not match! Take a closer look at trial %s' 
+                             % (str(trajectory.index.unique()[0])))
+        
+        # finally, check which saccade is closest in time to CoM
+        closest_onset_idx = abs(np.array(onsets)-com_idx).argmin()
+        closest_offset_idx = abs(np.array(offsets)-com_idx).argmin()
+        
+        closest_onset = onsets[closest_onset_idx]    
+        closest_offset = offsets[closest_offset_idx]
+        
+        # we have found the saccade onset and saccade offset which are closest in time to CoM
+        # let's find out which one of the two is closer
+        # if saccade onset is closer, it's marked as onset of CoM saccade
+        # if saccade offset is closer, then the onset of that saccade is marked as onset of CoM saccade
+        com_saccade_idx = (closest_onset 
+                           if abs(closest_onset - com_idx) < abs (closest_offset - com_idx) 
+                           else onsets[closest_offset_idx])
+        
+        lag = (t[com_idx] - t[com_saccade_idx])
+        
+        return pd.Series({'com_saccade_idx': com_saccade_idx,
+                          'com_t': t[com_idx],
+                          'com_saccade_t': t[com_saccade_idx], 
+                          'com_lag':lag})
