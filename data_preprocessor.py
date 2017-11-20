@@ -15,15 +15,10 @@ class DataPreprocessor:
     # it is needed when calculating initation time
     it_distance_threshold = 100
     eye_v_threshold = 1000
-
-    # these two trials have very poor eye data, so we exclude them
-    excluded_trials = [(391, 1, 10, 59), (451, 1, 8, 27)]
         
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
-    def preprocess_data(self, choices, dynamics, resample=0):
-#        choices, dynamics = self.drop_excluded_trials(choices, dynamics, self.excluded_trials)
-        
+    def preprocess_data(self, choices, dynamics, resample=0):       
         # originally, EyeLink data has -32768.0 values in place when data loss occurred
         # we replace it with np.nan to be able to use numpy functions properly
         dynamics = dynamics.replace(dynamics.eye_x.min(), np.nan)
@@ -43,21 +38,7 @@ class DataPreprocessor:
         dynamics['mouse_v'] = np.sqrt(dynamics.mouse_vx**2 + dynamics.mouse_vy**2 )
         dynamics['eye_v'] = np.sqrt(dynamics.eye_vx**2 + dynamics.eye_vy**2 )        
                           
-        return dynamics
-
-    def drop_excluded_trials(self, choices, dynamics, trials):
-        choices = choices.drop(trials, errors='ignore')
-        
-        # NB: this is a hack to deal with (supposedly) pandas bug.
-        # When multiindex values are not unique (as in dynamics dataframes), 
-        # drop doesn't really work, so we have to remove trials one-by-one
-        dynamics = dynamics.reset_index()
-        for trial in trials:
-            dynamics = dynamics[~((dynamics.subj_id==trial[0]) & (dynamics.session_no==trial[1]) & 
-                                  (dynamics.block_no==trial[2]) & (dynamics.trial_no==trial[3]))]
-        dynamics = dynamics.set_index(self.index, drop=True)
-        
-        return choices, dynamics        
+        return dynamics  
     
     def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
         choices['is_correct'] = choices['direction'] == choices['response']
@@ -265,7 +246,7 @@ class DataPreprocessor:
         com_direction = np.sign(trajectory.mouse_vx.iloc[com_idx + 1])
         
         t = trajectory.timestamp.values        
-        v = self.remove_nans(trajectory.eye_vx.values, fillna='zeros')
+        v = self.remove_blinks(trajectory.eye_vx.values, fillna='zeros')
     
         # to simplify saccade identification, treat all sub-threshold velocity values as zeros
         # to simplify this further, we only care about the saccades that match the direction of CoM
