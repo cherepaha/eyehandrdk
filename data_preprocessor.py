@@ -9,6 +9,8 @@ class DataPreprocessor:
     
     com_threshold_x = 50
     com_threshold_y = 100
+
+    late_com_y_threshold = 700
     
     # to determine exact response intiation,
     # threshold for distance travelled by mouse cursor (in pixels) during single movement
@@ -49,6 +51,8 @@ class DataPreprocessor:
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_midline_d))
         choices['is_com'] = ((choices.midline_d > self.com_threshold_x) & \
                                 (choices.midline_d_y > self.com_threshold_y))
+        choices['com_type'] = pd.cut(choices.midline_d_y, 
+               bins=[0, self.late_com_y_threshold, self.y_lim], labels=['early', 'late'])
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
         
@@ -62,7 +66,9 @@ class DataPreprocessor:
                 
         choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
         
-        choices = choices.join(dynamics[choices.is_com].groupby(level=self.index).apply(self.get_com_lag))
+        # TODO: figure out how to pass idx_midline_d to get_com_lag without adding a column to dynamics dataframe
+        dynamics = dynamics.join(choices.idx_midline_d)
+        choices = choices.join(dynamics[choices.is_com].groupby(level=self.index).apply(self.get_com_lag))        
         
         # We can also z-score within participant AND coherence level, the results remain the same
         # ['subj_id', 'coherence']
@@ -240,19 +246,21 @@ class DataPreprocessor:
                 raise ValueError('Incorrect value of fillna parameter')
                     
         return x
-    
-    def get_com_lag(self, trajectory):   
-        com_idx = int(trajectory.idx_midline_d.values[0])
-        com_direction = np.sign(trajectory.mouse_vx.iloc[com_idx + 1])
+
+    def get_com_lag(self, trajectory):
+        t = trajectory.timestamp.values
         
-        t = trajectory.timestamp.values        
+        com_idx = int(trajectory.idx_midline_d.values[0])
+        com_t = t[com_idx]
+        com_direction = np.sign(trajectory.mouse_vx.iloc[com_idx + 1])
+
         v = self.remove_blinks(trajectory.eye_vx.values, fillna='zeros')
     
         # to simplify saccade identification, treat all sub-threshold velocity values as zeros
         # to simplify this further, we only care about the saccades that match the direction of CoM
         # so we can simply drop all velocities in the wrong direction to zero
-        v[(abs(v)<self.eye_v_threshold) & ~(np.sign(v)==com_direction)] = 0
-        
+        v[(abs(v)<self.eye_v_threshold) | (~(np.sign(v)==com_direction))] = 0
+
         onsets = []
         offsets = []
         is_previous_v_zero = True
@@ -270,32 +278,30 @@ class DataPreprocessor:
                 is_previous_v_zero = True
         
         if len(onsets) == 0:
-            return pd.Series({'com_saccade_idx': np.nan,
-                              't_com': np.nan,
-                              't_com_saccade': np.nan, 
-                              'com_lag': np.nan})
+            (com_saccade_idx, com_saccade_t, com_lag) = (np.nan, np.nan, np.nan)
         elif len(onsets) != len(offsets):
             raise ValueError('Saccade onsets and offsets do not match! Take a closer look at trial %s' 
                              % (str(trajectory.index.unique()[0])))
-        
-        # finally, check which saccade is closest in time to CoM
-        closest_onset_idx = abs(np.array(onsets)-com_idx).argmin()
-        closest_offset_idx = abs(np.array(offsets)-com_idx).argmin()
-        
-        closest_onset = onsets[closest_onset_idx]    
-        closest_offset = offsets[closest_offset_idx]
-        
-        # we have found the saccade onset and saccade offset which are closest in time to CoM
-        # let's find out which one of the two is closer
-        # if saccade onset is closer, it's marked as onset of CoM saccade
-        # if saccade offset is closer, then the onset of that saccade is marked as onset of CoM saccade
-        com_saccade_idx = (closest_onset 
-                           if abs(closest_onset - com_idx) < abs (closest_offset - com_idx) 
-                           else onsets[closest_offset_idx])
-        
-        lag = (t[com_idx] - t[com_saccade_idx])
+        else:
+            # finally, check which saccade is closest in time to CoM
+            closest_onset_idx = abs(np.array(onsets)-com_idx).argmin()
+            closest_offset_idx = abs(np.array(offsets)-com_idx).argmin()
+            
+            closest_onset = onsets[closest_onset_idx]    
+            closest_offset = offsets[closest_offset_idx]
+            
+            # we have found the saccade onset and saccade offset which are closest in time to CoM
+            # let's find out which one of the two is closer
+            # if saccade onset is closer, it's marked as onset of CoM saccade
+            # if saccade offset is closer, then the onset of that saccade is marked as onset of CoM saccade
+            com_saccade_idx = (closest_onset 
+                               if abs(closest_onset - com_idx) < abs (closest_offset - com_idx) 
+                               else onsets[closest_offset_idx])
+            
+            com_saccade_t = t[com_saccade_idx]            
+            com_lag = (com_t - com_saccade_t)
         
         return pd.Series({'com_saccade_idx': com_saccade_idx,
-                          'com_t': t[com_idx],
-                          'com_saccade_t': t[com_saccade_idx], 
-                          'com_lag':lag})
+                          'com_t': com_t,
+                          'com_saccade_t': com_saccade_t, 
+                          'com_lag':com_lag})

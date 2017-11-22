@@ -13,9 +13,9 @@ def save_processed_data(path):
     processed_path = path + 'processed/'
     if not os.path.exists(processed_path):
         os.makedirs(processed_path)
-    choices.to_csv(processed_path + 'choices.txt', sep='\t')
-    dynamics.to_csv(processed_path + 'dynamics.txt', sep='\t')
-    stim_viewing.to_csv(processed_path + 'stim_viewing.txt', sep='\t')
+    choices.to_csv(processed_path + 'choices.txt', sep='\t', na_rep='nan')
+    dynamics.to_csv(processed_path + 'dynamics.txt', sep='\t', na_rep='nan')
+    stim_viewing.to_csv(processed_path + 'stim_viewing.txt', sep='\t', na_rep='nan')
 
 save_processed_data(path='../../data/HEM_exp_1/')
-#save_processed_data(path='../../data/HEM_exp_2/')
+save_processed_data(path='../../data/HEM_exp_2/')
