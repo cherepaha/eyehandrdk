@@ -43,6 +43,7 @@ class DataPreprocessor:
         return dynamics  
     
     def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
+        # TODO: get rid of extra index added as extra columns somewhere along the way (subj_id.1, ...)
         choices['is_correct'] = choices['direction'] == choices['response']
         choices.response_time /= 1000.0        
         choices['xflips'] = dynamics.groupby(level=self.index).\
@@ -73,6 +74,8 @@ class DataPreprocessor:
         # We can also z-score within participant AND coherence level, the results remain the same
         # ['subj_id', 'coherence']
         choices['mouse_IT_z'] = choices.mouse_IT.groupby(level='subj_id').apply(lambda c: (c-c.mean())/c.std())
+        
+        # TODO: this returns nan if eye_IT is inf, fix this! Maybe by setting inf to nan instead
         choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         
         return choices
@@ -164,7 +167,7 @@ class DataPreprocessor:
             # in the former case, initation time is inf, in the latter case, initation time is 0
             # we detect which case is tru  by looking at first value of eye_x
             if abs(traj.eye_x.iloc[0]) < 100: 
-                eye_IT = np.inf
+                eye_IT = np.nan
                 eye_initial_decision = 0
             else:
                 eye_IT = 0
