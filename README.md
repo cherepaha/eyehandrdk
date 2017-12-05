@@ -5,6 +5,7 @@ Currently, the analysis is summarized in two Jupyter notebooks:
 
 - [basic psychometrics](https://github.com/cherepaha/eyehandrdk/blob/master/psychometrics.ipynb)
 - [initiation times](https://github.com/cherepaha/eyehandrdk/blob/master/initiation_times.ipynb)
+- [hand-eye lag analysis] (https://github.com/cherepaha/eyehandrdk/blob/master/eye_hand_lags.ipynb)
 
 These notebooks are in active development, and more notebooks with more advanced analyses are on the way
 
