@@ -1,7 +1,7 @@
 # eyehandrdk
 Data analysis code for RDK experiment with eye- and hand-tracking.
 
-Currently, the analysis is summarized in two Jupyter notebooks:
+Currently, the analysis is summarized in three Jupyter notebooks:
 
 - [basic psychometrics](https://github.com/cherepaha/eyehandrdk/blob/master/psychometrics.ipynb)
 - [initiation times](https://github.com/cherepaha/eyehandrdk/blob/master/initiation_times.ipynb)
