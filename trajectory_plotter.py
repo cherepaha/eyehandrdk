@@ -96,9 +96,9 @@ class TrajectoryPlotter:
             
         self.ax.plot(trajectory.mouse_x, trajectory.mouse_y, ls=styles[0], marker=markers[0],
                      markersize = 7, label='Mouse', color=color, lw=lw)
-#        self.ax.plot(trajectory.eye_x, trajectory.eye_y, ls=styles[1], marker=markers[1],
-#                     markersize = 7, label='Eye')
-#        plt.legend(loc='lower left', fontsize = self.legendFontSize)
+        self.ax.plot(trajectory.eye_x, trajectory.eye_y, ls=styles[1], marker=markers[1],
+                     markersize = 7, label='Eye')
+        plt.legend(loc='lower left', fontsize = self.legendFontSize)
         plt.tight_layout()        
         return self.ax
     
