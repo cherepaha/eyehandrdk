@@ -77,6 +77,9 @@ class DataPreprocessor:
         choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         choices['ID_lag_z'] = choices.ID_lag.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         
+        choices['mouse_IT_tertile'] = pd.qcut(choices['mouse_IT'], 3, labels=[1, 2, 3])
+        choices['eye_IT_tertile'] = pd.qcut(choices['eye_IT'], 3, labels=[1, 2, 3])
+        
         return choices
     
     def set_origin_to_start(self, dynamics):
