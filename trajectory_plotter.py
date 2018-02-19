@@ -19,8 +19,8 @@ class TrajectoryPlotter:
     lw=2.0
     
     def __init__(self):
-        pass
-#        self.ax = self.init_xy_plot()
+#        pass
+        self.ax = self.init_xy_plot()
      
     def set_axis_params(self):
         self.ax.set_xlabel(r'x coordinate', fontsize=self.axisLabelFontSize)
