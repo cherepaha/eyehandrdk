@@ -28,7 +28,9 @@ class DataPreprocessor:
         dynamics = self.set_origin_to_start(dynamics)                   
         dynamics = self.shift_timeframe(dynamics)
         
-        dynamics = self.flip_left(choices, dynamics)
+        # flip trajectories for trials where direction == left
+        # so that all correct trajectories go to the right
+        dynamics.loc[choices.direction==180, ['mouse_x', 'eye_x']] *= -1
         
         if resample:
             dynamics = self.resample_trajectories(dynamics, n=resample)
@@ -44,7 +46,7 @@ class DataPreprocessor:
     
     def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
         # TODO: get rid of extra index added as extra columns somewhere along the way (subj_id.1, ...)
-        choices['is_correct'] = choices['direction'] == choices['response']
+        choices['is_correct'] = choices['direction'] == choices['response']        
         choices.response_time /= 1000.0        
         choices['xflips'] = dynamics.groupby(level=self.index).\
                                     apply(lambda traj: self.zero_cross_count(traj.mouse_vx.values))    
@@ -54,6 +56,12 @@ class DataPreprocessor:
                                 (choices.midline_d_y > self.com_threshold_y))
         choices['com_type'] = pd.cut(choices.midline_d_y, 
                bins=[0, self.late_com_y_threshold, self.y_lim], labels=['early', 'late'])
+
+        choices['is_correct_init'] = choices['is_correct']
+        choices.loc[choices.is_com, 'is_correct_init'] = (dynamics[choices.is_com]. \
+                   groupby(level=self.index).apply(self.get_initial_decision))
+        choices['is_double_com'] = choices.is_com & (choices.is_correct_init == choices.is_correct)
+
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
         
@@ -82,6 +90,13 @@ class DataPreprocessor:
         
         return choices
     
+    def exclude_trials(self, choices, dynamics, stim_viewing):        
+        dynamics = dynamics[~choices.is_double_com]
+        stim_viewing = stim_viewing[~choices.is_double_com]
+        choices = choices[~choices.is_double_com]
+        
+        return choices, dynamics, stim_viewing
+    
     def set_origin_to_start(self, dynamics):
         # set origin to start button location
         dynamics.mouse_x -= self.x_lim/2
@@ -97,17 +112,12 @@ class DataPreprocessor:
                                         transform(lambda t: (t-t.min()))/1000.0
         return dynamics
 
-    def flip_left(self, choices, dynamics):
-        for col in ['mouse_x', 'eye_x']:
-            dynamics.loc[choices.direction==180, ['mouse_x', 'eye_x']] *= -1
-        return dynamics
-
     def resample_trajectories(self, dynamics, n_steps=100):
         resampled_dynamics = dynamics.groupby(level=self.index).\
                                     apply(lambda traj: self.resample_trajectory(traj, n_steps=n_steps))
         resampled_dynamics.index = resampled_dynamics.index.droplevel(4)
         return resampled_dynamics
-            
+        
     def get_maxd(self, traj):
         alpha = np.arctan((traj.mouse_y.iloc[-1]-traj.mouse_y.iloc[0])/ \
                             (traj.mouse_x.iloc[-1]-traj.mouse_x.iloc[0]))
@@ -130,6 +140,10 @@ class DataPreprocessor:
                           'idx_midline_d': idx_midline_d,
                           'midline_d_y': midline_d_y})
 
+    def get_initial_decision(self, traj):    
+        # after flipping, x>0 is correct
+        return traj.mouse_x.values[np.argmax(abs(traj.mouse_x.values)>self.com_threshold_x)] > 0
+    
     def zero_cross_count(self, x):
         return (abs(np.diff(np.sign(x)[np.nonzero(np.sign(x))]))>1).sum()
 

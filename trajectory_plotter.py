@@ -18,6 +18,8 @@ class TrajectoryPlotter:
     axisLabelFontSize = 24
     lw=2.0
     
+    index = ['subj_id', 'session_no', 'block_no', 'trial_no']
+    
     def __init__(self):
 #        pass
         self.ax = self.init_xy_plot()
@@ -30,7 +32,7 @@ class TrajectoryPlotter:
         self.ax.set_ylim(self.y_lim)
         
     def plot_mouse_trajectories(self, trajectories, title='Mouse trajectories'):
-        for idx, trajectory in trajectories.groupby(level=['subj_id', 'session_no', 'block_no', 'trial_no']):
+        for idx, trajectory in trajectories.groupby(level=self.index):
             self.ax.plot(trajectory.mouse_x.values, trajectory.mouse_y.values, 
                          alpha = 0.2, color = sns.color_palette()[0])
 #        self.ax.legend()
@@ -189,14 +191,14 @@ class TrajectoryPlotter:
         axes[1][1].set_xlabel(r'time t', fontsize=self.axisLabelFontSize)
 #        axes[0][0].set_ylabel(r'x coordinate', fontsize=self.axisLabelFontSize)
 #        axes[1][0].set_ylabel(r'y coordinate', fontsize=self.axisLabelFontSize)
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        #figManager = plt.get_current_fig_manager()
+        #figManager.window.showMaximized()
         plt.tight_layout()
         return axes
     
     def plot_com_eye_x(self, com_eye_x):
         fig, ax = plt.subplots(1)
-        for idx, trajectory in com_eye_x.groupby(level=['subj_id', 'session_no', 'block_no', 'trial_no']):
+        for idx, trajectory in com_eye_x.groupby(level=self.index):
             ax.plot(trajectory.eye_x.values, alpha = 0.2, color = sns.color_palette()[0])
 #        self.ax.legend()
 #        self.ax.set_xlim(self.x_lim)
