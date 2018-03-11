@@ -20,12 +20,14 @@ class DataPreprocessor:
         
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
-    def preprocess_data(self, choices, dynamics, resample=0):       
-        # originally, EyeLink data has -32768.0 values in place when data loss occurred
-        # we replace it with np.nan to be able to use numpy functions properly
-        dynamics = dynamics.replace(dynamics.eye_x.min(), np.nan)
+    def preprocess_data(self, choices, dynamics, resample=0, model_data=False):       
+        if not model_data:
+            # originally, EyeLink data has -32768.0 values in place when data loss occurred
+            # we replace it with np.nan to be able to use numpy functions properly
+            dynamics = dynamics.replace(dynamics.eye_x.min(), np.nan)
+            
+            dynamics = self.set_origin_to_start(dynamics)                   
         
-        dynamics = self.set_origin_to_start(dynamics)                   
         dynamics = self.shift_timeframe(dynamics)
         
         # flip trajectories for trials where direction == left
@@ -44,7 +46,7 @@ class DataPreprocessor:
                           
         return dynamics  
     
-    def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing):
+    def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing=None, model_data=False):
         # TODO: get rid of extra index added as extra columns somewhere along the way (subj_id.1, ...)
         choices['is_correct'] = choices['direction'] == choices['response']        
         choices.response_time /= 1000.0        
@@ -52,8 +54,12 @@ class DataPreprocessor:
                                     apply(lambda traj: self.zero_cross_count(traj.mouse_vx.values))    
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_maxd))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_midline_d))
-        choices['is_com'] = ((choices.midline_d > self.com_threshold_x) & \
-                                (choices.midline_d_y > self.com_threshold_y))
+
+        if model_data:
+            choices['is_com'] = ((choices.midline_d > self.com_threshold_x))
+        else:                
+            choices['is_com'] = ((choices.midline_d > self.com_threshold_x) & \
+                                    (choices.midline_d_y > self.com_threshold_y))
         choices['com_type'] = pd.cut(choices.midline_d_y, 
                bins=[0, self.late_com_y_threshold, self.y_lim], labels=['early', 'late'])
 
@@ -66,12 +72,13 @@ class DataPreprocessor:
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
         
         # initiation time during stimulus presentation is aligned at stimulus offset, so it is non-positive
-        choices['stim_mouse_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_mouse_IT)
-        choices['stim_eye_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_eye_IT)
-        # Comment next line for premature responses to have mouse_IT = 0 regardless mouse movements during stimulus viewing        
-        choices.loc[choices.mouse_IT==0, 'mouse_IT'] = choices.loc[choices.mouse_IT==0, 'stim_mouse_IT']
-        # this correction is also recommended for eye_IT
-        choices.loc[choices.eye_IT==0, 'eye_IT'] = choices.loc[choices.eye_IT==0, 'stim_eye_IT']
+        if not stim_viewing is None:
+            choices['stim_mouse_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_mouse_IT)
+            choices['stim_eye_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_eye_IT)
+            # Comment next line for premature responses to have mouse_IT = 0 regardless mouse movements during stimulus viewing        
+            choices.loc[choices.mouse_IT==0, 'mouse_IT'] = choices.loc[choices.mouse_IT==0, 'stim_mouse_IT']
+            # this correction is also recommended for eye_IT
+            choices.loc[choices.eye_IT==0, 'eye_IT'] = choices.loc[choices.eye_IT==0, 'stim_eye_IT']
                 
         choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
         
@@ -85,8 +92,9 @@ class DataPreprocessor:
         choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         choices['ID_lag_z'] = choices.ID_lag.groupby(level='subj_id').apply(lambda c: (c-np.nanmean(c))/np.nanstd(c))
         
-        choices['mouse_IT_tertile'] = pd.qcut(choices['mouse_IT'], 3, labels=[1, 2, 3])
-        choices['eye_IT_tertile'] = pd.qcut(choices['eye_IT'], 3, labels=[1, 2, 3])
+        if not model_data:
+            choices['mouse_IT_tertile'] = pd.qcut(choices['mouse_IT'], 3, labels=[1, 2, 3])
+            choices['eye_IT_tertile'] = pd.qcut(choices['eye_IT'], 3, labels=[1, 2, 3])
         
         return choices
     
@@ -164,15 +172,17 @@ class DataPreprocessor:
             elif (not is_previous_v_zero):
                 offsets += [i]
                 is_previous_v_zero = True
-    
+
         submovements = pd.DataFrame([{'on': onsets[i], 
                  'off': offsets[i], 
                  'on_t': traj.timestamp.values[onsets[i]],
                  'distance':(traj.mouse_v[onsets[i]:offsets[i]]*
                              traj.timestamp.diff()[onsets[i]:offsets[i]]).sum()}
                 for i in range(len(onsets))])
-    
-        it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
+        if len(submovements):
+            it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
+        else:
+            it = np.inf
         return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
     
     def get_eye_IT(self, traj):        
