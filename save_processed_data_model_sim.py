@@ -4,10 +4,14 @@ path='../../data/HEM_sim/'
 
 dr = data_reader.DataReader()
 dp = data_preprocessor.DataPreprocessor()
-#
-choices, dynamics = dr.get_data(path=path, stim_viewing=False, sep=',',nrows=8000000)
-dynamics = dp.preprocess_data(choices, dynamics, model_data=True)
 
+n_trials = 1000
+trial_len = 4000
+
+choices, dynamics = dr.get_data(path=path, stim_viewing=False, sep=',', nrows=n_trials*trial_len)
+choices = choices[choices.index.get_level_values('trial_no')<n_trials+1]
+
+dynamics = dp.preprocess_data(choices, dynamics, model_data=True)
 choices = dp.get_mouse_and_gaze_measures(choices, dynamics, model_data=True)
 
 processed_path = path + 'processed/'
