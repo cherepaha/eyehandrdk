@@ -21,8 +21,8 @@ class TrajectoryPlotter:
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
     def __init__(self):
-#        pass
-        self.ax = self.init_xy_plot()
+        pass
+#         self.ax = self.init_xy_plot()
      
     def set_axis_params(self):
         self.ax.set_xlabel(r'x coordinate', fontsize=self.axisLabelFontSize)

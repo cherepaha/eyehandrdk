@@ -17,6 +17,11 @@ class DataPreprocessor:
     # it is needed when calculating initation time
     it_distance_threshold = 100
     eye_v_threshold = 1000
+    
+    resp_AOI_radius = 200
+    mouse_AOI_radius = 100
+    incorrect_AOI_centre = [-(x_lim/2-resp_AOI_radius), (y_lim-resp_AOI_radius)]
+    correct_AOI_centre = [(x_lim/2-resp_AOI_radius), (y_lim-resp_AOI_radius)] 
         
     index = ['subj_id', 'session_no', 'block_no', 'trial_no']
     
@@ -94,6 +99,7 @@ class DataPreprocessor:
         choices['ID_lag_z'] = choices.ID_lag.groupby(level='subj_id').apply(z)
         
         if not model_data:
+            choices = self.append_dwell_times(choices, dynamics)
             choices['mouse_IT_tertile'] = pd.qcut(choices['mouse_IT'], 3, labels=[1, 2, 3])
             choices['eye_IT_tertile'] = pd.qcut(choices['eye_IT'], 3, labels=[1, 2, 3])
         
@@ -335,3 +341,46 @@ class DataPreprocessor:
                           'com_t': com_t,
                           'com_saccade_t': com_saccade_t, 
                           'com_lag':com_lag})
+    
+    def append_dwell_times(self, choices, dynamics):
+        dwell_times = dynamics.groupby(by=self.index).apply(self.get_dwell_times)
+        choices = choices.join(dwell_times)
+        choices['dwell_chosen'] = choices.dwell_incorrect*(1-choices.is_correct) + \
+                            choices.dwell_correct*choices.is_correct
+        choices['dwell_chosen_not_cursor'] = choices.dwell_incorrect_not_cursor*(1-choices.is_correct) + \
+                            choices.dwell_correct_not_cursor*choices.is_correct
+    
+        # if is_correct = False, dwell_unchosen is set to dwell_correct
+        choices['dwell_unchosen'] = choices.dwell_incorrect*choices.is_correct + \
+                                    choices.dwell_correct*(1-choices.is_correct)
+        choices['dwell_unchosen_not_cursor'] = choices.dwell_incorrect_not_cursor*choices.is_correct + \
+                                    choices.dwell_correct_not_cursor*(1-choices.is_correct)
+    
+        return choices
+
+    def get_dwell_times(self, trajectory):
+        """
+        This is all assuming that correct option is always on the right-hand side of the screen (flipped trajectories)
+        """
+        is_in_cursor_area = (trajectory.eye_x - trajectory.mouse_x)**2 + \
+                    (trajectory.eye_y - trajectory.mouse_y)**2 < self.mouse_AOI_radius**2
+        is_in_incorrect_resp_area = (trajectory.eye_x - self.incorrect_AOI_centre[0])**2 + \
+                    (trajectory.eye_y - self.incorrect_AOI_centre[1])**2 < self.resp_AOI_radius**2
+        is_in_correct_resp_area = (trajectory.eye_x - self.correct_AOI_centre[0])**2 + \
+                    (trajectory.eye_y - self.correct_AOI_centre[1])**2 < self.resp_AOI_radius**2
+    
+        is_in_incorrect_resp_area_not_cursor = (is_in_incorrect_resp_area) & \
+                    ((trajectory.mouse_x - self.incorrect_AOI_centre[0])**2 + \
+                    (trajectory.mouse_y - self.incorrect_AOI_centre[1])**2 < self.resp_AOI_radius**2)
+    
+        is_in_correct_resp_area_not_cursor = (is_in_correct_resp_area) & \
+                    ((trajectory.mouse_x - self.correct_AOI_centre[0])**2 + \
+                    (trajectory.mouse_y - self.correct_AOI_centre[1])**2 < self.resp_AOI_radius**2)
+    
+        is_in_cursor_not_response_area = is_in_cursor_area & ~(is_in_incorrect_resp_area | is_in_correct_resp_area)
+    
+        return pd.Series({'dwell_incorrect': is_in_incorrect_resp_area.mean(), 
+                          'dwell_correct': is_in_correct_resp_area.mean(), 
+                          'dwell_incorrect_not_cursor': is_in_incorrect_resp_area_not_cursor.mean(), 
+                          'dwell_correct_not_cursor': is_in_correct_resp_area_not_cursor.mean(), 
+                          'dwell_cursor': is_in_cursor_not_response_area.mean()})

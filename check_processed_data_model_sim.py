@@ -12,7 +12,7 @@ tp = trajectory_plotter.TrajectoryPlotter()
 choices, dynamics = dr.get_data(path=path, stim_viewing=False, sep='\t')
 #choices = choices[choices.index.get_level_values('trial_no')<501]
 
-traj = da.get_random_trajectory(choices[choices.mouse_IT==np.inf], dynamics)
+traj = da.get_random_trajectory(choices[choices.is_com], dynamics)
 
 tp.plot_trajectory_x(traj)
 
