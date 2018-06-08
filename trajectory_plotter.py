@@ -50,19 +50,6 @@ class TrajectoryPlotter:
         self.ax.set_ylim(self.y_lim)
         plt.tight_layout()
     
-    def plot_pupil_size(self, trajectory):
-        fig, ax = plt.subplots(1)
-        ax.plot(trajectory.timestamp, trajectory.pupil_size_rel, marker='o')
-        ax.set_xlabel('Time, s')
-        ax.set_ylabel('Pupil size')
-        plt.tight_layout()    
-        
-    def plot_pupil_size_hist(self, data):
-        fig, ax = plt.subplots(1)
-        for subj_id, subj_data in data.groupby(level=['subj_id']):
-            sns.distplot(subj_data.pupil_size_rel, ax=ax)
-        plt.tight_layout()
-            
     def plot_all_subjects_trajectories(self, data, subj_ids):
         self.set_axis_params()        
         for subj_id in subj_ids:
