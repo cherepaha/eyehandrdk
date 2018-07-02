@@ -65,14 +65,14 @@ class TrajectoryPlotter:
     def init_xy_plot(self):
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111)        
-        plt.axis('scaled')
+        self.ax.set_aspect('equal')
         self.set_axis_params()
         left_resp_area = plt.Circle(self.left_resp_area_center, self.resp_area_radius, 
                                     alpha = 0.3, color = 'red')
         right_resp_area = plt.Circle(self.right_resp_area_center, self.resp_area_radius, 
                                      alpha = 0.3, color = 'green')
-        plt.gca().add_artist(left_resp_area)
-        plt.gca().add_artist(right_resp_area)
+        self.ax.add_artist(left_resp_area)
+        self.ax.add_artist(right_resp_area)
         
         return self.ax
         
@@ -87,7 +87,7 @@ class TrajectoryPlotter:
                      markersize = 7, label='Mouse', color=color, lw=lw)
         self.ax.plot(trajectory.eye_x, trajectory.eye_y, ls=styles[1], marker=markers[1],
                      markersize = 7, label='Eye')
-        plt.legend(loc='lower left', fontsize = self.legendFontSize)
+#        plt.legend(loc='lower left', fontsize = self.legendFontSize, frameon=False)
         plt.tight_layout()        
         return self.ax
     
