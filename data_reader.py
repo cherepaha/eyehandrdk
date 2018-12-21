@@ -14,11 +14,11 @@ class DataReader:
         
         if rename_vars:
             choices = choices.rename(columns={
-                    'mouse_IT': 'hand IT', 
+                    'hand_IT': 'hand IT', 
                     'eye_IT': 'eye IT', 
-                    'mouse_IT_z': 'hand IT (z)', 
+                    'hand_IT_z': 'hand IT (z)', 
                     'eye_IT_z': 'eye IT (z)', 
-                    'mouse_IT_tertile': 'hand IT tertile',
+                    'hand_IT_tertile': 'hand IT tertile',
                     'eye_IT_tertile': 'eye IT tertile',
                     'ID_lag': 'hand-eye lag at initiation',
                     'ID_lag_z': 'hand-eye lag at initiation (z)'})

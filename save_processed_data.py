@@ -8,7 +8,7 @@ def save_processed_data(path):
     dynamics = dp.preprocess_data(choices, dynamics)
     stim_viewing = dp.preprocess_data(choices, stim_viewing)
     
-    choices = dp.get_mouse_and_gaze_measures(choices, dynamics, stim_viewing)
+    choices = dp.get_hand_and_gaze_measures(choices, dynamics, stim_viewing)
     choices, dynamics, stim_viewing = dp.exclude_trials(choices, dynamics, stim_viewing)    
     
     processed_path = path + 'processed/'
@@ -18,5 +18,5 @@ def save_processed_data(path):
     dynamics.to_csv(processed_path + 'dynamics.txt', sep='\t', na_rep='nan', float_format='%.4f')
     stim_viewing.to_csv(processed_path + 'stim_viewing.txt', sep='\t', na_rep='nan', float_format='%.4f')
 
-save_processed_data(path='../../data/HEM_exp_1/')
-save_processed_data(path='../../data/HEM_exp_2/')
+save_processed_data(path='C:/Users/Arkady/Google Drive/data/eyehandrdk/exp_1/')
+save_processed_data(path='C:/Users/Arkady/Google Drive/data/eyehandrdk/exp_2/')

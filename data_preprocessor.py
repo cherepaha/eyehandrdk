@@ -51,7 +51,7 @@ class DataPreprocessor:
                           
         return dynamics  
     
-    def get_mouse_and_gaze_measures(self, choices, dynamics, stim_viewing=None, model_data=False):
+    def get_hand_and_gaze_measures(self, choices, dynamics, stim_viewing=None, model_data=False):
         # TODO: get rid of extra index added as extra columns somewhere along the way (subj_id.1, ...)
         choices['is_correct'] = choices['direction'] == choices['response']        
         choices.response_time /= 1000.0        
@@ -73,19 +73,22 @@ class DataPreprocessor:
                    groupby(level=self.index).apply(self.get_initial_decision))
         choices['is_double_com'] = choices.is_com & (choices.is_correct_init == choices.is_correct)
 
-        choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_mouse_IT))
+        choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_hand_IT))
         choices = choices.join(dynamics.groupby(level=self.index).apply(self.get_eye_IT))
         
         # initiation time during stimulus presentation is aligned at stimulus offset, so it is non-positive
         if not stim_viewing is None:
-            choices['stim_mouse_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_mouse_IT)
+            choices['stim_hand_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_hand_IT)
             choices['stim_eye_IT'] = stim_viewing.groupby(level=self.index).apply(self.get_stim_eye_IT)
-            # Comment next line for premature responses to have mouse_IT = 0 regardless mouse movements during stimulus viewing        
-            choices.loc[choices.mouse_IT==0, 'mouse_IT'] = choices.loc[choices.mouse_IT==0, 'stim_mouse_IT']
+            # Comment next line for premature responses to have hand_IT = 0 regardless hand movements during stimulus viewing   
+            # TODO: even after this, there are too many zero hand IT's
+            # investigate the trajectories in Exp 2 where both hand_IT = 0 and stim_hand_IT = 0
+            # Most are in subject 624
+            choices.loc[choices.hand_IT==0, 'hand_IT'] = choices.loc[choices.hand_IT==0, 'stim_hand_IT']
             # this correction is also recommended for eye_IT
             choices.loc[choices.eye_IT==0, 'eye_IT'] = choices.loc[choices.eye_IT==0, 'stim_eye_IT']
                 
-        choices['ID_lag'] = choices.mouse_IT - choices.eye_IT
+        choices['ID_lag'] = choices.hand_IT - choices.eye_IT
         
         # TODO: figure out how to pass idx_midline_d to get_com_lag without adding a column to dynamics dataframe
         dynamics = dynamics.join(choices.idx_midline_d)
@@ -94,13 +97,13 @@ class DataPreprocessor:
         # We can also z-score within participant AND coherence level, the results remain the same
         # ['subj_id', 'coherence']
         z = lambda c: (c-np.nanmean(c))/np.nanstd(c)
-        choices['mouse_IT_z'] = choices.mouse_IT.groupby(level='subj_id').apply(z)
+        choices['hand_IT_z'] = choices.hand_IT.groupby(level='subj_id').apply(z)
         choices['eye_IT_z'] = choices.eye_IT.groupby(level='subj_id').apply(z)
         choices['ID_lag_z'] = choices.ID_lag.groupby(level='subj_id').apply(z)
         
         if not model_data:
             choices = self.append_dwell_times(choices, dynamics)
-            choices['mouse_IT_tertile'] = pd.qcut(choices['mouse_IT'], 3, labels=[1, 2, 3])
+            choices['hand_IT_tertile'] = pd.qcut(choices['hand_IT'], 3, labels=[1, 2, 3])
             choices['eye_IT_tertile'] = pd.qcut(choices['eye_IT'], 3, labels=[1, 2, 3])
         
         return choices
@@ -162,7 +165,7 @@ class DataPreprocessor:
     def zero_cross_count(self, x):
         return (abs(np.diff(np.sign(x)[np.nonzero(np.sign(x))]))>1).sum()
 
-    def get_mouse_IT(self, traj):
+    def get_hand_IT(self, traj):
         v = traj.mouse_v.values
     
         onsets = []
@@ -190,7 +193,7 @@ class DataPreprocessor:
             it = submovements.loc[submovements.distance.ge(self.it_distance_threshold ).idxmax()].on_t
         else:
             it = np.inf
-        return pd.Series({'mouse_IT': it, 'motion_time': traj.timestamp.max()-it})
+        return pd.Series({'hand_IT': it, 'motion_time': traj.timestamp.max()-it})
     
     def get_eye_IT(self, traj):        
         v = traj.eye_v
@@ -212,7 +215,7 @@ class DataPreprocessor:
         
         return pd.Series({'eye_IT': eye_IT, 'eye_initial_decision': eye_initial_decision})
 
-    def get_stim_mouse_IT(self, stim_traj):
+    def get_stim_hand_IT(self, stim_traj):
         t = stim_traj.timestamp.values
         v = stim_traj.mouse_v.values
         if v[-1]:
